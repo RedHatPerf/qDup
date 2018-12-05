@@ -3,7 +3,7 @@ package perf.qdup;
 import org.junit.Ignore;
 import org.junit.Test;
 import perf.qdup.cmd.Cmd;
-import perf.qdup.cmd.CommandDispatcher;
+import perf.qdup.cmd.Dispatcher;
 import perf.qdup.cmd.Result;
 import perf.qdup.cmd.Script;
 import perf.qdup.config.CmdBuilder;
@@ -12,8 +12,6 @@ import perf.qdup.config.RunConfigBuilder;
 import perf.qdup.config.YamlParser;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -29,6 +27,32 @@ public class RunTest extends SshTestBase{
 //    @Rule
 //    public final TestServer testServer = new TestServer();
 
+    @Test
+    public void pwd_in_dollar(){
+        YamlParser parser = new YamlParser();
+        parser.load("pwd",stream(""+
+            "scripts:",
+            "  foo:",
+            "    - sh: echo \"pwd is: $(pwd)\"",
+            "    - echo:",
+                "hosts:",
+                "  local: "+getHost(),
+                "roles:",
+                "  doit:",
+                "    hosts: [local]",
+                "    run-scripts: [foo]"
+        ));
+
+        RunConfigBuilder builder = new RunConfigBuilder(CmdBuilder.getBuilder());
+
+        builder.loadYaml(parser);
+        RunConfig config = builder.buildConfig();
+        assertFalse("runConfig errors:\n"+config.getErrors().stream().collect(Collectors.joining("\n")),config.hasErrors());
+        Dispatcher dispatcher = new Dispatcher();
+        Run doit = new Run("/tmp",config,dispatcher);
+
+        doit.run();
+    }
 
     @Test
     public void signal_in_previous_stage(){
@@ -58,7 +82,7 @@ public class RunTest extends SshTestBase{
         builder.loadYaml(parser);
         RunConfig config = builder.buildConfig();
         assertFalse("runConfig errors:\n"+config.getErrors().stream().collect(Collectors.joining("\n")),config.hasErrors());
-        CommandDispatcher dispatcher = new CommandDispatcher();
+        Dispatcher dispatcher = new Dispatcher();
         Run doit = new Run("/tmp",config,dispatcher);
 
         doit.run();
@@ -98,7 +122,7 @@ public class RunTest extends SshTestBase{
         builder.addRoleRun("role","cmd-output-trim",new HashMap<>());
 
         RunConfig config = builder.buildConfig();
-        CommandDispatcher dispatcher = new CommandDispatcher();
+        Dispatcher dispatcher = new Dispatcher();
         Run doit = new Run("/tmp",config,dispatcher);
 
         doit.run();
@@ -108,7 +132,7 @@ public class RunTest extends SshTestBase{
             char c = output.charAt(i);
             hasNewLine = hasNewLine || '\n' == c || '\r' ==c;
         }
-        assertFalse("output shoult not have \\r or \\n",hasNewLine);
+        assertFalse("output should not have \\r or \\n",hasNewLine);
     }
 
     @Test
@@ -145,7 +169,7 @@ public class RunTest extends SshTestBase{
 
 
         RunConfig config = builder.buildConfig();
-        CommandDispatcher dispatcher = new CommandDispatcher();
+        Dispatcher dispatcher = new Dispatcher();
         Run doit = new Run("/tmp",config,dispatcher);
 
         doit.run();
@@ -173,14 +197,14 @@ public class RunTest extends SshTestBase{
 
         RunConfigBuilder builder = new RunConfigBuilder(CmdBuilder.getBuilder());
 
-
         builder.addHostAlias("local",getHost().toString());
         builder.addScript(runScript);
         builder.addHostToRole("role","local");
         builder.addRoleRun("role","run-for-each",new HashMap<>());
 
         RunConfig config = builder.buildConfig();
-        CommandDispatcher dispatcher = new CommandDispatcher();
+
+        Dispatcher dispatcher = new Dispatcher();
         Run doit = new Run("/tmp",config,dispatcher);
 
         doit.run();
@@ -209,7 +233,7 @@ public class RunTest extends SshTestBase{
         builder.addRoleRun("role","script",new HashMap<>());
 
         RunConfig config = builder.buildConfig();
-        CommandDispatcher dispatcher = new CommandDispatcher();
+        Dispatcher dispatcher = new Dispatcher();
         Run doit = new Run("/tmp",config,dispatcher);
 
         doit.run();
@@ -222,7 +246,7 @@ public class RunTest extends SshTestBase{
         StringBuilder postAbort = new StringBuilder();
         StringBuilder run = new StringBuilder();
         StringBuilder cleanup = new StringBuilder();
-
+        AtomicBoolean cleanupCalled = new AtomicBoolean(false);
         Script setupScript = new Script("setup-abort");
         setupScript.then(Cmd.code((input,sate)->{
             setup.append(System.currentTimeMillis());
@@ -241,6 +265,7 @@ public class RunTest extends SshTestBase{
         Script cleanupScript =new Script("cleanup-abort");
         cleanupScript.then(Cmd.log("fooooooooooo"));
         cleanupScript.then(Cmd.code((input,state)->{
+            cleanupCalled.set(true);
             cleanup.append(System.currentTimeMillis());
             return Result.next("invoked cleanup-abort "+System.currentTimeMillis());
         }));
@@ -258,11 +283,10 @@ public class RunTest extends SshTestBase{
         builder.addRoleCleanup("role","cleanup-abort",new HashMap<>());
 
         RunConfig config = builder.buildConfig();
-        CommandDispatcher dispatcher = new CommandDispatcher();
+        Dispatcher dispatcher = new Dispatcher();
         Run doit = new Run("/tmp",config,dispatcher);
 
         doit.run();
-
 
         assertFalse("setup not called:"+setup.toString()+"||",setup.length()==0);
         assertTrue("postAbort should not be called:"+postAbort.toString()+"||",postAbort.length()==0);
@@ -306,7 +330,7 @@ public class RunTest extends SshTestBase{
         builder.addRoleCleanup("role","cleanup",new HashMap<>());
 
         RunConfig config = builder.buildConfig();
-        CommandDispatcher dispatcher = new CommandDispatcher();
+        Dispatcher dispatcher = new Dispatcher();
         Run doit = new Run("/tmp",config,dispatcher);
 
         doit.run();
@@ -319,6 +343,7 @@ public class RunTest extends SshTestBase{
 
     @Test
     public void watch_invoke_count(){
+
         List<String> lines = new ArrayList<>();
 
         StringBuilder tailed = new StringBuilder();
@@ -338,7 +363,6 @@ public class RunTest extends SshTestBase{
                 }))
                 .watch(Cmd.regex("foo")
                     .then(Cmd.code(((input, state) -> {
-                        System.out.println("foo line="+input);
                         return Result.next(input);
                     }))
                 ))
@@ -368,10 +392,11 @@ public class RunTest extends SshTestBase{
         builder.addRoleRun("role","send",new HashMap<>());
 
         RunConfig config = builder.buildConfig();
-        CommandDispatcher dispatcher = new CommandDispatcher();
+        Dispatcher dispatcher = new Dispatcher();
         Run run = new Run("/tmp",config,dispatcher);
 
         run.run();
+        run.writeRunJson();
 
         assertFalse("should stop tail before biz",tailed.toString().contains("biz"));
         //TODO fix the 4th entry is empty that occurs when SuffixStream removes prompt but not preceeding \r\n
@@ -382,6 +407,7 @@ public class RunTest extends SshTestBase{
     }
 
 
+    //@Test(timeout = 45_000)
     @Test
     public void ctrlCTail(){
         List<String> lines = new ArrayList<>();
@@ -427,14 +453,16 @@ public class RunTest extends SshTestBase{
         builder.addRoleRun("role","send",new HashMap<>());
 
         RunConfig config = builder.buildConfig();
-        CommandDispatcher dispatcher = new CommandDispatcher();
+
+        Dispatcher dispatcher = new Dispatcher();
         Run run = new Run("/tmp",config,dispatcher);
 
         run.run();
 
+
         assertFalse("should stop tail before biz",tailed.toString().contains("biz"));
         //TODO fix the 4th entry is empty that occurs when SuffixStream removes prompt but not preceeding \r\n
-        //assertEquals("lines should have 3 entries:"+lines,3,lines.size());
+        assertTrue("lines should have 3+ entries:"+lines,lines.size()>=3);
         assertEquals("lines[0] should be !:"+lines,"!",lines.get(0));
         assertEquals("lines[1] should be foo:"+lines,"foo",lines.get(1));
         assertEquals("lines[2] should be bar:"+lines,"bar",lines.get(2));
@@ -470,7 +498,7 @@ public class RunTest extends SshTestBase{
         builder.addRoleRun("role","one",new HashMap<>());
 
         RunConfig config = builder.buildConfig();
-        CommandDispatcher dispatcher = new CommandDispatcher();
+        Dispatcher dispatcher = new Dispatcher();
         Run run = new Run("/tmp",config,dispatcher);
         run.run();
 
@@ -509,7 +537,7 @@ public class RunTest extends SshTestBase{
 
 
         RunConfig config = builder.buildConfig();
-        CommandDispatcher dispatcher = new CommandDispatcher();
+        Dispatcher dispatcher = new Dispatcher();
         Run run = new Run("/tmp",config,dispatcher);
 
         run.run();
@@ -566,7 +594,7 @@ public class RunTest extends SshTestBase{
         builder.addRoleCleanup("role","post-run-cleanup",new HashMap<>());
 
         RunConfig config = builder.buildConfig();
-        CommandDispatcher dispatcher = new CommandDispatcher();
+        Dispatcher dispatcher = new Dispatcher();
         Run run = new Run("/tmp",config,dispatcher);
         long start = System.currentTimeMillis();
         run.run();
@@ -575,10 +603,9 @@ public class RunTest extends SshTestBase{
         assertTrue("cleanupTimer should be > 0",cleanupTimer.get() > 0);
         assertTrue("done should stop before NEVER is signalled",cleanupTimer.get() - start < 30_000);
 
-
         File foo = new File("/tmp/foo.txt");
         File outputPath = new File(run.getOutputPath());
-        File downloaded = new File(outputPath.getAbsolutePath(),"laptop/foo.txt");
+        File downloaded = new File(outputPath.getAbsolutePath(),getHost().getHostName()+"/foo.txt");
 
         assertTrue("queue-download should execute despite done",downloaded.exists());
 
@@ -610,7 +637,7 @@ public class RunTest extends SshTestBase{
 
         RunConfig config = builder.buildConfig();
 
-        CommandDispatcher dispatcher = new CommandDispatcher();
+        Dispatcher dispatcher = new Dispatcher();
         Run run = new Run("/tmp",config,dispatcher);
 
         run.run();
@@ -653,7 +680,7 @@ public class RunTest extends SshTestBase{
 
         RunConfig config = builder.buildConfig();
 
-        CommandDispatcher dispatcher = new CommandDispatcher();
+        Dispatcher dispatcher = new Dispatcher();
         Run run = new Run("/tmp",config,dispatcher);
 
         run.run();

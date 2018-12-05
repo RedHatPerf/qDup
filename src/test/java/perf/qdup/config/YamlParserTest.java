@@ -25,7 +25,7 @@ public class YamlParserTest extends SshTestBase {
             Json checkMe = toCheck.remove();
 
             if(checkMe.isArray()){
-                fail("CHILD should not check arrays\n"+checkMe.toString(2));
+                fail("CHILD should not check arrays\nCHILD:"+checkMe.toString(2)+"\nFULL:"+json.toString(2));
                 return false; // error, arrays should not be added
             }else{
                 if(checkMe.has(CHILD)){
@@ -99,6 +99,63 @@ public class YamlParserTest extends SshTestBase {
     }
 
     @Test
+    public void keyValue(){
+        YamlParser parser = new YamlParser();
+        parser.load("keyValue",stream(""+
+                "key1:value1",
+                "key2:value2"
+
+        ));
+    }
+    @Test
+    public void keyValue_dashed_nospace(){
+        YamlParser parser = new YamlParser();
+        parser.load("keyValue",stream(""+
+                "-key1:value1",
+                "-key2:value2"
+        ));
+    }
+    @Test
+    public void dashed_keyValue_nospace(){
+        YamlParser parser = new YamlParser();
+        parser.load("keyValue",stream(""+
+            "-key1:value1",
+            "-key2:value2"
+        ));
+
+        System.out.println(parser.getJson().toString(2));
+    }
+
+    @Test
+    public void noSpaceAfterDash(){
+        YamlParser parser = new YamlParser();
+        parser.load("child",stream(""+
+                "- script: foo",
+                "-script: bar"
+        ));
+
+        //TODO validate the yaml
+    }
+    @Test
+    public void childNotIndented(){
+        YamlParser parser = new YamlParser();
+        parser.load("child",stream(""+
+            "top:",
+            "- key1: good",
+            "    with: { KEY: \"value\" }",
+            "- key2: bad",
+            "  with: { KEY: \"value\" }",
+            ""
+        ));
+
+        validateParse(parser);
+        Json child = parser.getJson();
+        System.out.println(child.toString(2));
+
+        //TODO validate the yaml
+    }
+
+    @Test
     public void doubleSlashQuote_value(){
         YamlParser parser = new YamlParser();
         parser.load("slash",stream(""+
@@ -109,6 +166,8 @@ public class YamlParserTest extends SshTestBase {
         validateParse(parser);
 
         Json slash = parser.getJson("slash");
+
+        System.out.println(slash.toString(2));
         assertTrue("slash is array[1]",slash.isArray() && slash.size()==1);
         Json first = slash.getJson(0);
 
@@ -471,10 +530,7 @@ public class YamlParserTest extends SshTestBase {
         parser.load("comments",stream(""+
                 "KEY:VALUE",
                 "\"ke:y\":VALUE"));
-
         Json json = parser.getJson();
-
-
         validateParse(parser);
 
     }
@@ -493,9 +549,7 @@ public class YamlParserTest extends SshTestBase {
                 "  a.c : a.a #withQuote\"",
                 "  a.d : a.d \\#notComment",
                 "  #aComment2"));
-
         Json json = parser.getJson();
-
         validateParse(parser);
 
     }
@@ -517,14 +571,7 @@ public class YamlParserTest extends SshTestBase {
                 "  a.b : a.b"));
 
         validateParse(parser);
-
         Json json = parser.getJson();
-
-
-
-
-
-
     }
 
     //Demonstrates a difference between how YamlParser and Yaml would parse input
@@ -538,12 +585,7 @@ public class YamlParserTest extends SshTestBase {
                 "  - name: secondName",
                 "    label: secondLabel"));
         validateParse(parser);
-
-
         Json json = parser.getJson();
-
-
-
     }
 
     // Tests for parsing the Yaml
@@ -559,18 +601,9 @@ public class YamlParserTest extends SshTestBase {
         "bar:",
         " - bar.foo : bf",
         "   bar.bar : bb"));
-
-
-
         validateParse(parser);
-
         Json json = parser.getJson();
-
-
-
-
     }
-
 
     @Test
     public void nesting(){

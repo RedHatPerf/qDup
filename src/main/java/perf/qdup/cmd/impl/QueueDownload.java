@@ -2,16 +2,14 @@ package perf.qdup.cmd.impl;
 
 import perf.qdup.cmd.Cmd;
 import perf.qdup.cmd.Context;
-import perf.qdup.cmd.CommandResult;
 
 import java.io.File;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.regex.Matcher;
 
 public class QueueDownload extends Cmd {
     private String path;
+    private String populatedPath;
     private String destination;
+    private String populatedDestination;
     public QueueDownload(String path, String destination){
         this.path = path;
         this.destination = destination;
@@ -30,32 +28,40 @@ public class QueueDownload extends Cmd {
     public String toString(){return "queue-download: " + path + (destination.isEmpty()?"":(" -> "+destination));}
 
     @Override
-    public void run(String input, Context context, CommandResult result) {
-        String basePath = context.getRunOutputPath()+ File.separator+context.getSession().getHostName();
+    public void run(String input, Context context) {
+        String basePath = context.getRunOutputPath()+ File.separator+context.getSession().getHost().getHostName();
         String resolvedPath = Cmd.populateStateVariables(getPath(),this,context.getState());
         String resolvedDestination = Cmd.populateStateVariables(basePath + File.separator + getDestination(),this,context.getState());
 
         if(resolvedPath.matches("[^\\$]*\\$(?!\\{\\{).*")){
-            context.getSession().sh("echo "+resolvedPath);
-            resolvedPath = context.getSession().getOutput().trim();
+            resolvedPath = context.getSession().shSync("echo "+resolvedPath);
         }
         if(resolvedDestination.matches("[^\\$]*\\$(?!\\{\\{).*")){
-            context.getSession().sh("echo "+resolvedDestination);
-            resolvedDestination = context.getSession().getOutput().trim();
+            resolvedDestination = context.getSession().shSync("echo "+resolvedDestination);
         }
-
+        populatedPath = resolvedPath;
+        populatedDestination = resolvedDestination;
         context.addPendingDownload(resolvedPath,resolvedDestination);
 
         File destinationFile = new File(resolvedDestination);
         if(!destinationFile.exists()){
             destinationFile.mkdirs();
         }
-        result.next(this,input);
+        context.next(input);
 
     }
 
     @Override
     public Cmd copy() {
         return new QueueDownload(path,destination);
+    }
+
+    @Override
+    public String getLogOutput(String output,Context context){
+        if(populatedPath!=null){
+            return "queue-download: "+populatedPath+" "+populatedDestination;
+        }else{
+            return "queue-download: "+path+" "+destination;
+        }
     }
 }

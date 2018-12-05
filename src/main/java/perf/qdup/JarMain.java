@@ -13,7 +13,9 @@ import org.apache.commons.cli.OptionGroup;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.slf4j.LoggerFactory;
-import perf.qdup.cmd.CommandDispatcher;
+import org.slf4j.ext.XLogger;
+import org.slf4j.ext.XLoggerFactory;
+import perf.qdup.cmd.Dispatcher;
 import perf.qdup.config.CmdBuilder;
 import perf.qdup.config.RunConfig;
 import perf.qdup.config.RunConfigBuilder;
@@ -23,6 +25,7 @@ import perf.yaup.StringUtil;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.invoke.MethodHandles;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -32,6 +35,8 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class JarMain {
+
+    private static final XLogger logger = XLoggerFactory.getXLogger(MethodHandles.lookup().lookupClass());
 
     public static void main(String[] args) {
 
@@ -117,7 +122,7 @@ public class JarMain {
         options.addOption(
             Option.builder("k")
                 .longOpt("knownHosts")
-                .desc("qdup known hosts path [~/.qdup/known_hosts]")
+                .desc("qdup known hosts path [~/.ssh/known_hosts]")
                 .hasArg()
                 .argName("path")
                 .type(String.class)
@@ -139,7 +144,7 @@ public class JarMain {
                 .longOpt("identity")
                 .argName("path")
                 .hasArg()
-                .desc("qdup identity path [~/.qdup/id_rsa]")
+                .desc("qdup identity path [~/.ssh/id_rsa]")
                 .type(String.class)
                 .build()
         );
@@ -176,7 +181,7 @@ public class JarMain {
         try{
             cmd = parser.parse(options,args);
         } catch (ParseException e) {
-            System.out.println(e.getMessage());
+            logger.error(e.getMessage(),e);
             formatter.printHelp(cmdLineSyntax,options);
             System.exit(1);
             return;
@@ -204,7 +209,7 @@ public class JarMain {
         }
 
         if(yamlPaths.isEmpty()){
-            System.out.println("Missing required yaml file(s)");
+            logger.error("Missing required yaml file(s)");
             formatter.printHelp(cmdLineSyntax,options);
             System.exit(1);
             return;
@@ -223,17 +228,17 @@ public class JarMain {
         for(String yamlPath : yamlPaths){
             File yamlFile = new File(yamlPath);
             if(!yamlFile.exists()){
-                System.out.println("Error: cannot find "+yamlPath);
+                logger.error("Error: cannot find "+yamlPath);
                 System.exit(1);//return error to shell / jenkins
             }else{
                 if(yamlFile.isDirectory()){
-                    System.out.println("loading directory: "+yamlPath);
+                    logger.trace("loading directory: "+yamlPath);
                     for(File child : yamlFile.listFiles()){
-                        System.out.println("  loading: "+child.getPath());
+                        logger.trace("  loading: "+child.getPath());
                         yamlParser.load(child.getPath());
                     }
                 }else{
-                    System.out.println("loading: "+yamlPath);
+                    logger.trace("loading: "+yamlPath);
                     yamlParser.load(yamlPath);
 
                 }
@@ -245,7 +250,7 @@ public class JarMain {
 
         if(yamlParser.hasErrors()){
             for(String error : yamlParser.getErrors()){
-                System.out.println("Error: "+error);
+                logger.error("Error: "+error);
             }
             System.exit(1);
             return;
@@ -277,6 +282,7 @@ public class JarMain {
         RunConfig config = runConfigBuilder.buildConfig();
 
         if(cmd.hasOption("test")){
+            //logger.info(config.debug());
             System.out.println(config.debug());
             System.exit(0);
         }
@@ -314,8 +320,7 @@ public class JarMain {
 
         final Thread.UncaughtExceptionHandler uncaughtExceptionHandler = (thread, throwable) ->{
 
-            System.out.println("UNCAUGHT:"+thread.getName()+" "+throwable.getMessage());
-            throwable.printStackTrace(System.out);
+            logger.error("UNCAUGHT:"+thread.getName()+" "+throwable.getMessage(),throwable);
         };
 
         ThreadFactory factory = r -> {
@@ -326,13 +331,13 @@ public class JarMain {
         ThreadPoolExecutor executor = new ThreadPoolExecutor(commandThreads/2,commandThreads,30, TimeUnit.MINUTES,workQueue,factory);
         ScheduledThreadPoolExecutor scheduled = new ScheduledThreadPoolExecutor(scheduledThreads, runnable -> new Thread(runnable,"scheduled-"+scheduledCounter.getAndIncrement()));
 
-        CommandDispatcher dispatcher = new CommandDispatcher(executor,scheduled);
+        Dispatcher dispatcher = new Dispatcher(executor,scheduled);
 
 
 
         final Run run = new Run(outputPath,config,dispatcher);
 
-        System.out.println("Starting with output path = "+run.getOutputPath());
+        logger.info("Starting with output path = "+run.getOutputPath());
 
         Runtime.getRuntime().addShutdownHook(new Thread(()->{
             if(!run.isAborted()) {

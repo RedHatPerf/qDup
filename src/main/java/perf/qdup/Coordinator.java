@@ -3,7 +3,8 @@ package perf.qdup;
 import org.slf4j.ext.XLogger;
 import org.slf4j.ext.XLoggerFactory;
 import perf.qdup.cmd.Cmd;
-import perf.qdup.cmd.CommandResult;
+import perf.qdup.cmd.Context;
+import perf.yaup.json.Json;
 
 import java.lang.invoke.MethodHandles;
 import java.util.*;
@@ -24,17 +25,17 @@ public class Coordinator {
 
 
     class Waiter {
-        CommandResult result;
+        Context context;
         String input;
         Cmd command;
-        public Waiter( Cmd command, CommandResult result, String input){
+        public Waiter( Cmd command, Context context, String input){
             this.command = command;
-            this.result = result;
+            this.context = context;
             this.input = input;
         }
         public Cmd getCommand(){return command;}
 
-        public CommandResult getResult() {return result;}
+        public Context getContext() {return context;}
         public String getInput(){return input;}
 
         @Override
@@ -47,10 +48,10 @@ public class Coordinator {
             return false;
         }
         public void next(){
-            result.next(command,input);
+            context.next(input);
         }
         public void skip(){
-            result.skip(command,input);
+            context.skip(input);
         }
     }
 
@@ -62,8 +63,6 @@ public class Coordinator {
 
     private Map<String,AtomicInteger> counters;
 
-    private AtomicInteger zero = new AtomicInteger(0);
-
     public Coordinator(){
         latches = new HashMap<>();
         latchTimes = new LinkedHashMap<>();
@@ -73,9 +72,7 @@ public class Coordinator {
     }
 
     public List<Waiter> ensureWaitFor(String name){
-        if(!waitFors.containsKey(name)){
-            waitFors.put(name,Collections.synchronizedList(new LinkedList<>()));
-        }
+        waitFors.putIfAbsent(name,Collections.synchronizedList(new LinkedList<>()));
         return waitFors.get(name);
     }
 
@@ -93,6 +90,20 @@ public class Coordinator {
     }
     public void removeObserver(Consumer<String> observer){
         observers.remove(observer);
+    }
+
+    public Json getWaitJson(){
+        Json rtrn = new Json();
+        waitFors.keySet().forEach(key->{
+            Json entry = new Json();
+            rtrn.set(key,entry);
+            waitFors.get(key).forEach(waiter->{
+                Cmd head = waiter.getCommand().getHead();
+                Host host = waiter.getContext().getHost();
+                entry.add(head.toString()+"-"+head.getUid()+"@"+host.getShortHostName());
+            });
+        });
+        return rtrn;
     }
 
     public int increase(String name){
@@ -159,8 +170,8 @@ public class Coordinator {
             waiters.clear();
         }
     }
-    public void waitFor(String name,Cmd command,CommandResult result,String input){
-        Waiter waiter = new Waiter(command,result,input);
+    public void waitFor(String name, Cmd command, Context context, String input){
+        Waiter waiter = new Waiter(command,context,input);
         waitFor(name,waiter);
     }
     private void waitFor(String name,Waiter waiter){
@@ -179,9 +190,9 @@ public class Coordinator {
             }
         }
     }
-    public void waitFor(String name,Cmd command,CommandResult result,String input, long timeout, TimeUnit unit){
+    public void waitFor(String name,Cmd command,Context context,String input, long timeout, TimeUnit unit){
         //TODO use scheduled task to implement timeout
-        Waiter waiter = new Waiter(command,result,input);
+        Waiter waiter = new Waiter(command,context,input);
         waitFor(name,waiter);
     }
 

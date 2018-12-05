@@ -2,7 +2,6 @@ package perf.qdup.cmd.impl;
 
 import perf.qdup.cmd.Cmd;
 import perf.qdup.cmd.Context;
-import perf.qdup.cmd.CommandResult;
 
 import java.io.File;
 
@@ -19,11 +18,11 @@ public class Download extends Cmd {
     public String getPath(){return path;}
     public String getDestination(){return destination;}
     @Override
-    public void run(String input, Context context, CommandResult result) {
+    public void run(String input, Context context) {
 
-        String basePath = context.getRunOutputPath()+ File.separator+context.getSession().getHostName();
-        String userName = context.getSession().getUserName();
-        String hostName = context.getSession().getHostName();
+        String basePath = context.getRunOutputPath()+ File.separator+context.getSession().getHost().getHostName();
+        String userName = context.getSession().getHost().getUserName();
+        String hostName = context.getSession().getHost().getHostName();
         String remotePath = populateStateVariables(path,this,context.getState());
         String destinationPath =  populateStateVariables(basePath + File.separator +destination,this,context.getState());
         File destinationFile = new File(destinationPath);
@@ -32,7 +31,7 @@ public class Download extends Cmd {
         }
 
         context.getLocal().download(remotePath,destinationPath,context.getSession().getHost());
-        result.next(this,path);
+        context.next(path);
     }
 
     @Override

@@ -2,27 +2,28 @@ package perf.qdup.cmd.impl;
 
 import perf.qdup.cmd.Cmd;
 import perf.qdup.cmd.Context;
-import perf.qdup.cmd.CommandResult;
 
 public class RepeatUntilSignal extends Cmd.LoopCmd {
     private String name;
+    private String populatedName;
+    private int amount=-1;
     public RepeatUntilSignal(String name){
         this.name = name;
     }
     public String getName(){return name;}
 
     @Override
-    public void run(String input, Context context, CommandResult result) {
-        String populatedName = Cmd.populateStateVariables(name,this,context.getState());
+    public void run(String input, Context context) {
+        populatedName = Cmd.populateStateVariables(name,this,context.getState());
 
         if(populatedName==null || populatedName.isEmpty()){
-            result.skip(this,input);
+            context.skip(input);
         }
-        int amount = context.getCoordinator().getSignalCount(populatedName);
+        amount = context.getCoordinator().getSignalCount(populatedName);
         if( amount > 0 ){
-            result.next(this,input);
+            context.next(input);
         }else{
-            result.skip(this,input);
+            context.skip(input);
         }
     }
 
@@ -38,4 +39,14 @@ public class RepeatUntilSignal extends Cmd.LoopCmd {
     }
     @Override
     public String toString(){return "repeat-until: "+name;}
+
+    @Override
+    public String getLogOutput(String output,Context context){
+        String toUse = populatedName!=null ? populatedName : name;
+        if(amount > 0 ){
+            return "repeat-until: "+toUse;
+        }else{
+            return "";
+        }
+    }
 }

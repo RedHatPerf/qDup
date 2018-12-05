@@ -2,14 +2,15 @@ package perf.qdup.cmd.impl;
 
 import perf.qdup.cmd.Cmd;
 import perf.qdup.cmd.Context;
-import perf.qdup.cmd.CommandResult;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 public class Sh extends Cmd {
+
     private String command;
+    private String populatedCommand;
     private Map<String,String> prompt;
     public Sh(String command){
         this(command,false, Collections.EMPTY_MAP);
@@ -30,18 +31,33 @@ public class Sh extends Cmd {
     }
 
     @Override
-    public void run(String input, Context context, CommandResult result) {
-        String commandString = populateStateVariables(command,this,context.getState());
+    public void run(String input, Context context) {
+        context.getProfiler().start("Sh-invoke:"+command);
+        populatedCommand = populateStateVariables(command,this,context.getState());
+
+        //TODO do we need to manually remove the lineObserver?
         if(prompt.isEmpty()) {
-            context.getSession().sh(commandString, this, result);
+            context.getSession().sh(populatedCommand, (output)->{
+                context.next(output);
+            });
         }else{
             HashMap<String,String> populated = new HashMap<>();
             prompt.forEach((key,value)->{
                 String populatedValue = Cmd.populateStateVariables(value,this,context.getState(),true);
                 populated.put(key,populatedValue);
             });
-            context.getSession().sh(commandString,this, result,populated);
+            context.getSession().sh(populatedCommand,context::next,populated);
         }
+        context.getProfiler().start("Sh-await-callback:"+command);
+    }
+
+    @Override
+    public String getLogOutput(String output,Context context){
+        String rtrn = populatedCommand;
+        if(!isSilent() && output!=null && !output.isEmpty()){
+            rtrn+="\n"+output;
+        }
+        return rtrn;
     }
 
     @Override
@@ -49,5 +65,8 @@ public class Sh extends Cmd {
         return new Sh(this.command,super.isSilent(),prompt);
     }
 
-    @Override public String toString(){return "sh: "+command;}
+    @Override public String toString(){
+        String toUse = populatedCommand!=null ? populatedCommand : command;
+        return "sh: "+toUse;
+    }
 }

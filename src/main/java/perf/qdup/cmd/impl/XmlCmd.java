@@ -1,7 +1,6 @@
 package perf.qdup.cmd.impl;
 
 import perf.qdup.cmd.Cmd;
-import perf.qdup.cmd.CommandResult;
 import perf.qdup.cmd.Context;
 import perf.yaup.StringUtil;
 import perf.yaup.file.FileUtility;
@@ -51,7 +50,7 @@ public class XmlCmd extends Cmd {
     }
 
     @Override
-    public void run(String input, Context context, CommandResult result) {
+    public void run(String input, Context context) {
         Xml xml = null;
         boolean successful = true;
         String output = input;
@@ -63,16 +62,14 @@ public class XmlCmd extends Cmd {
                 remotePath = removeQuotes(remotePath);
 
                 if(!remotePath.isEmpty() && !remotePath.startsWith("/")){
-                    context.getSession().clearCommand();
-                    context.getSession().sh("pwd");
-                    String pwd = context.getSession().getOutput().trim();
+                    String pwd = context.getSession().shSync("pwd");
                     remotePath = pwd+File.separator+path;
                 }
             }
             if(remotePath==null || remotePath.isEmpty()){
                 xml = Xml.parse(input);
             }else{
-                tmpDest = File.createTempFile("cmd-"+this.getUid()+"-"+context.getSession().getHostName(),"."+System.currentTimeMillis());
+                tmpDest = File.createTempFile("cmd-"+this.getUid()+"-"+context.getSession().getHost().getHostName(),"."+System.currentTimeMillis());
 
                 context.getLocal().download(remotePath,tmpDest.getPath(),context.getSession().getHost());
                 xml = Xml.parseFile(tmpDest.getPath());
@@ -105,7 +102,7 @@ public class XmlCmd extends Cmd {
                 context.getLocal().upload(tmpDest.getPath(), remotePath, context.getSession().getHost());
             }
         } catch (IOException e) {
-            logger.error("{}@{} failed to create local tmp file",this.toString(),context.getSession().getHostName(),e);
+            logger.error("{}@{} failed to create local tmp file",this.toString(),context.getSession().getHost().getHostName(),e);
             successful = false;
             output = "COULD NOT LOAD: "+path;
         } finally {
@@ -113,9 +110,9 @@ public class XmlCmd extends Cmd {
                 tmpDest.delete();
             }
             if(successful){
-                result.next(this,output);
+                context.next(output);
             }else{
-                result.skip(this,output);
+                context.skip(output);
             }
         }
     }

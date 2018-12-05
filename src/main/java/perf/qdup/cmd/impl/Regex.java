@@ -2,30 +2,34 @@ package perf.qdup.cmd.impl;
 
 import perf.qdup.cmd.Cmd;
 import perf.qdup.cmd.Context;
-import perf.qdup.cmd.CommandResult;
 import perf.yaup.StringUtil;
 
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Regex extends Cmd {
 
+    private String pattern;
     private String patternString;
+    private boolean matched = false;
+    private Map<String,String> matches;
     public Regex(String pattern){
+        this.pattern = pattern;
         this.patternString = StringUtil.removeQuotes(pattern).replaceAll("\\\\\\\\(?=[dDsSwW])","\\\\");
+        this.matches = new HashMap<>();
     }
+
     public String getPattern(){return patternString;}
     @Override
-    public void run(String input, Context context, CommandResult result) {
+    public void run(String input, Context context) {
         String populatedPattern = populateStateVariables(patternString,this,context.getState());
         String newPattern = populatedPattern;
 
+        matches.clear();
+
         //key is a regex friendly capture name and value is the user provided capture name
         LinkedHashMap<String,String> renames = new LinkedHashMap<>();
-
         Matcher fieldMatcher = NAMED_CAPTURE.matcher(populatedPattern);
 
         while(fieldMatcher.find()){
@@ -41,8 +45,8 @@ public class Regex extends Cmd {
         Matcher matcher = pattern.matcher(input);
 
         //full line matching only if the pattern specifies start of line
-        boolean matches = newPattern.startsWith("^") ? matcher.matches() : matcher.find();
-        if(matches){
+        matched = newPattern.startsWith("^") ? matcher.matches() : matcher.find();
+        if(matched){
             logger.trace("{} match {} ",this,input);
             fieldMatcher = NAMED_CAPTURE.matcher(newPattern);
             List<String> names = new LinkedList<>();
@@ -53,17 +57,21 @@ public class Regex extends Cmd {
                 for(String name : names){
                     String capturedValue = matcher.group(name);
                     String realName = renames.get(name);
-                    context.getState().set(realName,capturedValue);
+                    matches.put(realName,capturedValue);
+                    //context.getState().set(realName,capturedValue);
                 }
             }
-            result.next(this,input);
+            if(!matches.isEmpty()){
+                for(String key : matches.keySet()){
+                    context.getState().set(key,matches.get(key));
+                }
+            }
+            context.next(input);
         }else{
             logger.trace("{} NOT match {} ",this,input);
-            result.skip(this,input);
+            context.skip(input);
         }
     }
-
-
 
     @Override
     public Cmd copy() {
@@ -71,7 +79,6 @@ public class Regex extends Cmd {
     }
 
     @Override public String toString(){return "regex: "+replaceEscapes(patternString);}
-
 
     private String replaceEscapes(String input){
         return input.replace("\n","\\n")
@@ -82,5 +89,24 @@ public class Regex extends Cmd {
                 .replace("\"","\\\"")
                 .replace("\\","\\\\");
 
+    }
+
+    @Override
+    public String getLogOutput(String output,Context context){
+        if(matched){
+            StringBuffer sb = new StringBuffer();
+            sb.append("regex: ");
+            sb.append(replaceEscapes(patternString));
+            if(!matches.isEmpty()) {
+                for (String key : matches.keySet()) {
+                    sb.append("\n");
+                    sb.append("  " + key + "=" + matches.get(key));
+
+                }
+            }
+            return sb.toString();
+        }else{
+            return "regex: "+replaceEscapes(patternString);
+        }
     }
 }

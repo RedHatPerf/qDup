@@ -52,6 +52,7 @@ public class Profiles {
                 toAdd.set("name", timeInstrument.getName());
                 toAdd.set("ns", timeInstrument.elapsedTime());
                 rtrn.add(toAdd);
+
             });
         }else{
             
@@ -59,6 +60,4 @@ public class Profiles {
 
         return rtrn;
     }
-
-
 }
