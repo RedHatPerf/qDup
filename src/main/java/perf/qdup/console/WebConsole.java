@@ -3,17 +3,17 @@ package perf.qdup.console;
 import io.vertx.core.Vertx;
 import perf.qdup.Coordinator;
 import perf.qdup.Run;
-import perf.qdup.cmd.CommandDispatcher;
+import perf.qdup.cmd.Dispatcher;
 import perf.qdup.util.Runner;
 
 public class WebConsole {
 
     public static Run run;
-    public static CommandDispatcher dispatcher;
+    public static Dispatcher dispatcher;
     public static Coordinator coordinator;
     private final Vertx vertx = Vertx.vertx();
 
-    public WebConsole(Run run, CommandDispatcher dispatcher, Coordinator coordinator) {
+    public WebConsole(Run run, Dispatcher dispatcher, Coordinator coordinator) {
         this.run = run;
         this.dispatcher = dispatcher;
         this.coordinator = coordinator;
