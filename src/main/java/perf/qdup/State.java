@@ -29,7 +29,7 @@ public class State {
     public static final String CHILD_DELIMINATOR = ".";
 
     private State parent;
-    private Map<String,String> state;
+    private Json state;
     private Map<String,State> childStates;
     private String prefix;
 
@@ -38,18 +38,18 @@ public class State {
     }
     public State(State parent,String prefix){
         this.parent = parent;
-        this.state = new ConcurrentHashMap<>();
+        this.state = new Json();
         this.childStates = new ConcurrentHashMap<>();
         this.prefix = prefix;
     }
 
 
-    public Map<String,String> getOwnState(){
-        return Collections.unmodifiableMap(state);
+    public Map<Object,Object> getOwnState(){
+        return Collections.unmodifiableMap(Json.toObjectMap(state));
     }
-    public Map<String,String> getFullState(){
-        Map<String,String> rtrn = new HashMap<>(state);
-        State target = this.parent;
+    public Map<Object,Object> getFullState(){
+        Map<Object,Object> rtrn = new HashMap<>();
+        State target = this;
         while( target!=null ){
             for(String key : target.getKeys()){
                 if(!rtrn.containsKey(key)){
@@ -76,23 +76,30 @@ public class State {
         }
         return childStates.get(name);
     }
-    public String set(String key,String value){
+    public void set(String key,Object value){
         State target = this;
         do {
             if(target.prefix!=null && key.startsWith(target.prefix)){
-                return target.state.put(key.substring(target.prefix.length()),value);
+                target.state.set(key.substring(target.prefix.length()),value);
+                return;
             }
         } while( (target=target.parent)!=null );
 
         //see if the key starts with a child name
         for(String childName : childStates.keySet()){
             if(key.startsWith(childName+CHILD_DELIMINATOR)){
-                return childStates.get(childName).set(key.substring(childName.length()+CHILD_DELIMINATOR.length()),value);
+                childStates.get(childName).set(key.substring(childName.length()+CHILD_DELIMINATOR.length()),value);
+                return;
             }
         }
 
         //at this point there wasn't a prefix match
-        return this.state.put(key,value);
+        this.state.set(key,value);
+    }
+    public void set(Json json){
+        for(Object key : json.keys()){
+            set((String)key,json.get(key));
+        }
     }
     public void set(Map<String,String> map){
         for(String key : map.keySet()){
@@ -109,18 +116,18 @@ public class State {
         boolean rtrn = false;
         State target = this;
         while(!rtrn && target!=null){
-            rtrn = target.state.containsKey(key);
+            rtrn = key.startsWith("?") ? Json.find(target.state,key)!=null : target.state.has(key);
             target = target.parent;
         }
         return rtrn;
     }
-    public String get(String key){
+    public Object get(String key){
         State target = this;
-        String rtrn = null;
+        Object rtrn = null;
         //check for a prefix match
         do {
             if(target.prefix!=null && key.startsWith(target.prefix)){
-                rtrn = target.state.get(key.substring(target.prefix.length()));
+                rtrn = key.startsWith("$") ? Json.find(target.state,key) : target.state.get(key);
             }
         }while( (target=target.parent)!=null && rtrn==null);
 
@@ -128,7 +135,7 @@ public class State {
         if(rtrn == null) {
             target = this;
             do {
-                rtrn = target.state.get(key);
+                rtrn = key.startsWith("$") ? Json.find(target.state,key) : target.state.get(key);
             } while (rtrn == null && (target = target.parent) != null);
         }
         return rtrn;
@@ -164,7 +171,7 @@ public class State {
     public Json toJson(){
         Json rtrn = new Json();
 
-        for(String key : state.keySet()){
+        for(Object key : state.keySet()){
             rtrn.set(key,state.get(key));
         }
         for(String child : childStates.keySet()){
@@ -185,13 +192,16 @@ public class State {
     }
 
     public State clone(){
+        return clone(false);
+    }
+    public State clone(boolean deep){
         State rtrn = new State(this.parent,this.prefix);
         //break abstraction to avoid prefix checks
         this.state.forEach((k,v)->{
-            rtrn.state.put(k,v);
+            rtrn.state.set(k,v);
         });
         this.childStates.forEach((k,v)->{
-            rtrn.childStates.put(k,v);
+            rtrn.childStates.put(k,deep ? v.clone() : v);
         });
         return rtrn;
     }

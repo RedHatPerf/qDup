@@ -5,6 +5,7 @@ import org.slf4j.ext.XLoggerFactory;
 import perf.qdup.cmd.Cmd;
 import perf.qdup.cmd.Context;
 import perf.yaup.StringUtil;
+import perf.yaup.json.Json;
 
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
@@ -20,7 +21,7 @@ public class ForEach extends Cmd.LoopCmd {
 
     private String declaredInput;
     private String loadedInput;
-    private final List<String> split = new ArrayList<>();
+    private final List<Object> split = new ArrayList<>();
     private int index = -1;
 
     public ForEach(String name){
@@ -62,19 +63,28 @@ public class ForEach extends Cmd.LoopCmd {
     @Override
     public void run(String input, Context context) {
         try {
-            if(split.isEmpty()){
+            String populatedDeclaredInput = Cmd.populateStateVariables(declaredInput,this,context.getState());
 
-                if(!declaredInput.isEmpty()){
-                    String populatedDeclaredInput = Cmd.populateStateVariables(declaredInput,this,context.getState());
-
+            //if we need to load from declaredInput
+            if( !declaredInput.isEmpty() && (split.isEmpty() || !this.loadedInput.equals(populatedDeclaredInput)) ) {
+                split.clear();
+                index=-1;
+                if(Cmd.isSingleStateReference(declaredInput)){
+                    Object value = getStateValue(declaredInput,this,context.getState(),new Cmd.Ref(this));
+                    if(value!=null) {
+                        if(value instanceof Json){
+                            split.addAll(((Json)value).values());
+                        }else{
+                            split.addAll(split(value.toString()));
+                        }
+                    }
+                }else{
                     split.addAll(split(populatedDeclaredInput));
-                    this.loadedInput = populatedDeclaredInput;
-                } else {
-                    split.addAll(split(input));
-                    this.loadedInput = input;
                 }
-            }
-            if (this.declaredInput.isEmpty() && !this.loadedInput.equals(input)) {//for-each under a for-each needs to identify when the input changed
+                this.loadedInput = populatedDeclaredInput;//set loadedInput to the string rep of what we loaded
+
+            //if we need to load from input
+            }else if (declaredInput.isEmpty() && (split.isEmpty() || !this.loadedInput.equals(input))){
                 split.clear();
                 split.addAll(split(input));
                 index=-1;
@@ -85,9 +95,12 @@ public class ForEach extends Cmd.LoopCmd {
                 populatedName = Cmd.populateStateVariables(this.name, this, context.getState());
                 index++;
                 if (index < split.size()) {
-                    String value = split.get(index).replaceAll("\r|\n", "");//defensive against trailing newline characters
+                    Object value = split.get(index);
+                    if(value instanceof String) {
+                        value = ((String)value).replaceAll("\r|\n", "");//defensive against trailing newline characters
+                    }
                     with(populatedName, value);
-                    context.next(value);
+                    context.next(value.toString());
                 } else {
                     context.skip(input);
                 }

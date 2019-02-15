@@ -1,6 +1,7 @@
 package perf.qdup;
 
 import org.junit.Test;
+import perf.yaup.json.Json;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -8,6 +9,24 @@ import static org.junit.Assert.assertTrue;
 
 public class StateTest {
 
+
+
+
+    @Test
+    public void get_nested_search(){
+        State state = new State("");
+        Json json = new Json();
+        json.set("bar",new Json());
+        json.getJson("bar").set("biz","value");
+        state.set("foo", json);
+        Object found;
+        found = state.get("$.foo");
+        assertTrue("state should have $.foo",found!=null);
+        assertTrue("state.get($.foo) should be Json",found instanceof Json);
+        found = state.get("$.foo.bar");
+        assertTrue("state should have $.foo.bar",found!=null);
+        assertTrue("state.get($.foo.bar) should be Json",found instanceof Json);
+    }
 
     @Test
     public void emptyPrefixMakesParentsReadOnly(){

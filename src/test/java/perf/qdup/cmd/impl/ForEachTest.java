@@ -306,6 +306,8 @@ public class ForEachTest extends SshTestBase {
         assertEquals("for-each should not split quoted string:\n"+splits.stream().collect(Collectors.joining("\n")),1,splits.size());
 
     }
+
+
     @Test
     public void yaml_state(){
         YamlParser parser = new YamlParser();
