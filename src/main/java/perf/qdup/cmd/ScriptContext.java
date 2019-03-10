@@ -184,6 +184,7 @@ public class ScriptContext implements Context, Runnable{
     public void next(String output) {
         getProfiler().start("next");
         Cmd cmd = getCurrentCmd();
+        System.out.println("Next from "+cmd+" to "+cmd.getNext());
         log(cmd,output);
         observerPreNext(cmd,output);
         if(cmd!=null) {
@@ -202,6 +203,7 @@ public class ScriptContext implements Context, Runnable{
     public void skip(String output) {
         getProfiler().start("skip");
         Cmd cmd = getCurrentCmd();
+        System.out.println("Skip from "+cmd+" to "+cmd.getSkip());
         log(cmd,output);
         observerPreSkip(cmd,output);
         if(cmd!=null) {
@@ -300,10 +302,13 @@ public class ScriptContext implements Context, Runnable{
                         );
                     }
                 }
-                long startDoRun = System.currentTimeMillis();
-                cmd.doRun(input, this);
-
-                long stopDoRun = System.currentTimeMillis();
+                try {
+                    cmd.doRun(input, this);
+                }catch(Exception e){
+                    logger.error(e.getMessage(),e);
+                    getRunLogger().error("Aborting due to Exception\n  host="+session.getHost()+"\n  cmd="+cmd.toString()+"\n  message="+e.getMessage(),e);
+                    run.abort(false);
+                }
                 if (cmd.hasWatchers()) {
                     getProfiler().start("watch:"+cmd.toString());
                     String line = "";

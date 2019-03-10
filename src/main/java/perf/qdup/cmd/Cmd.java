@@ -338,7 +338,8 @@ public abstract class Cmd {
                 }while( (targeetRef=targeetRef.getParent())!=null && rtrn==null);
             }
             if (rtrn == null && state!=null){
-                rtrn = state.get(currentName).toString();
+                Object found = state.get(currentName);
+                rtrn = found!=null ? found.toString() : "";
             }
         }while (rtrn!=null && (currentName=rtrn).contains(STATE_PREFIX));
         return rtrn;
