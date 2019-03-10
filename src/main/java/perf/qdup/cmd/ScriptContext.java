@@ -184,7 +184,6 @@ public class ScriptContext implements Context, Runnable{
     public void next(String output) {
         getProfiler().start("next");
         Cmd cmd = getCurrentCmd();
-        System.out.println("Next from "+cmd+" to "+cmd.getNext());
         log(cmd,output);
         observerPreNext(cmd,output);
         if(cmd!=null) {
